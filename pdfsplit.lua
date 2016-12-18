@@ -169,7 +169,6 @@ for pageCounter = 1, PdfFile.NumPages do
     -- write objects
     for i,data in pairs(PdfFile2Write.Structure) do
         if not testUnnecessary(PdfFile2Write, i, unnecessaryList) then 
-print("obj number  "..i)
             PdfFile2Write.Offset[i] = wfh:seek()
             wfh:write(i.." 0 obj\n")    
             wfh:write(PdfFile2Write.Structure[i])
