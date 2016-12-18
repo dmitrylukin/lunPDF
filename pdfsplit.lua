@@ -122,12 +122,18 @@ for pageCounter = 1, PdfFile.NumPages do
     local PdfFile2Write = copyTable(PdfFile)
     local a = PdfFile.Structure[PdfFile.PagesObject]:gsub("/Count%s+%d+", "/Count 1")
     PdfFile2Write.Structure[PdfFile2Write.PagesObject] = a
-    local b = PdfFile2Write.Structure[PdfFile2Write.PagesObject]:match("/Kids%[(.+)%]")
+    local tmp = PdfFile2Write.Structure[PdfFile2Write.PagesObject]:gsub("\n","")
+--    local b = PdfFile2Write.Structure[PdfFile2Write.PagesObject]:match("/Kids%[(.+)%]")
+    local b = tmp:match("/Kids%s*%[(.+)%]")
+--print("Befote:   "..b)
     for k = 1, pageCounter - 1 do 
         b = b:gsub("^%s*%d+%s+%d+%s+%a+", " ", 1)
     end
+--print("After: "..b)
     PdfFile.PagesKids[pageCounter] = b:match("^%s*(%d+)%s+0%s+R")      
-    z = a:gsub("/Kids%[(.+)%]", "/Kids[ "..PdfFile.PagesKids[pageCounter].." 0 R ]")
+--print("Kids: "..PdfFile.PagesKids[pageCounter])
+    z = tmp:gsub("/Kids%s*%[(.+)%]", "/Kids[ "..PdfFile.PagesKids[pageCounter].." 0 R ]")
+--print("Result:"..z)
     PdfFile2Write.Structure[PdfFile2Write.PagesObject] = z
 
 ---------------------------------------
