@@ -98,35 +98,37 @@ PdfFile.Parse = function(fh)
     return trailer, structure
 end 
 
-fh = PdfFile.Read(arg[1])
-PdfFile.Trailer, PdfFile.Structure = PdfFile.Parse(fh)
+
+function split(pdf) 
+
+    PdfFile.Trailer, PdfFile.Structure = PdfFile.Parse(pdf)
 
 -- if debug then print("Trailer: "..PdfFile.Trailer) end
 -----------------------
 -- Get root catalog
-PdfFile.RootObject = PdfFile.Trailer:match("/Root%s+(%d+)%s+%d+")
-if debug then print("RootCatalog object:  "..PdfFile.RootObject) end
+    PdfFile.RootObject = PdfFile.Trailer:match("/Root%s+(%d+)%s+%d+")
+    if debug then print("RootCatalog object:  "..PdfFile.RootObject) end
 -----------------------
 -- Get page number
-PdfFile.RootObject = tonumber(PdfFile.RootObject)
-PdfFile.PagesObject = PdfFile.Structure[PdfFile.RootObject]:match("/Pages%s(%d+)%s%d%sR")
-if debug then print("Pages object:  "..PdfFile.PagesObject) end
-PdfFile.PagesObject = tonumber(PdfFile.PagesObject)
-PdfFile.NumPages = PdfFile.Structure[PdfFile.PagesObject]:match("/Count%s(%d+)")
-if debug then print("Number of pages in pdf: "..PdfFile.NumPages) end
+    PdfFile.RootObject = tonumber(PdfFile.RootObject)
+    PdfFile.PagesObject = PdfFile.Structure[PdfFile.RootObject]:match("/Pages%s(%d+)%s%d%sR")
+    if debug then print("Pages object:  "..PdfFile.PagesObject) end
+    PdfFile.PagesObject = tonumber(PdfFile.PagesObject)
+    PdfFile.NumPages = PdfFile.Structure[PdfFile.PagesObject]:match("/Count%s(%d+)")
+    if debug then print("Number of pages in pdf: "..PdfFile.NumPages) end
 
-PdfFile.NumPages = tonumber(PdfFile.NumPages)
-if PdfFile.NumPages == 1 then 
-    print("There is one page pdf document. No changes needed.") 
-    return 0
-end
+    PdfFile.NumPages = tonumber(PdfFile.NumPages)
+    if PdfFile.NumPages == 1 then 
+        print("There is one page pdf document. No changes needed.") 
+        return 0
+    end
 ---------------------------
--- Create output files
-for pageCounter = 1, PdfFile.NumPages do
+-- Create output blobs
+    for pageCounter = 1, PdfFile.NumPages do
     -- create filename 
-    local fname = arg[1]:match("(%a+).pdf")
-    fname = fname.."-"..pageCounter..".pdf"
-    local wfh=io.open(fname,"wb")
+        local outputBlobIDX = arg[1]:match("(%a+).pdf")
+        fname = fname.."-"..pageCounter..".pdf"
+        local wfh=io.open(fname,"wb")
 ---------------------------------------
 -- Creating output PdfFile
     
@@ -199,4 +201,7 @@ for pageCounter = 1, PdfFile.NumPages do
     wfh:close()
 end -- end write file loop
 
+return splittedPdfs
 
+
+end -- end split (main) function
