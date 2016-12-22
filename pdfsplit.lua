@@ -23,74 +23,130 @@ local function copyTable(original)
     return copy
  end
 
+local function toString(tab)
+    local str = ""
+    if type(tab) ~= 'table' then 
+        return tab
+    end
+    for k, v in pairs(tab) do
+           if type(v) == 'table' then
+                v = toString(v)
+           end
+           str = str..v
+    end
+    return str
+ end
+
+
+local function getNextBinaryChar(stream, pos) 
+    return stream:sub(pos, pos)
+end
+
+local function getItNum(tab, regexp)
+    if type(tab) ~= 'table' then     return tonumber(tab:match(regexp))     end
+    for _, v in pairs(tab) do
+        res = v:match(regexp)
+        if res then return tonumber(res) end
+    end
+    return nil
+end
+local function changeItString(tab, from, to)
+    local tmp = ""
+    if type(tab) ~= 'table' then tmp = tab:gsub(from, to) 
+    else
+        for _, v in pairs(tab) do 
+            tmp = tmp..v:gsub(from, to)
+        end
+    end
+    return tmp:gsub("\n","")
+end
+
 PdfFile = {}
 
 PdfFile.Trailer = nil
 PdfFile.NumPages = nil
-PdfFile.Structure = {}
-PdfFile.Offset = {}
-PdfFile.Stream = {}
 PdfFile.ObjectCounter = 0
 PdfFile.RootObject = 0
 PdfFile.PagesObject = 0
+PdfFile.Structure = {}
+PdfFile.Offset = {}
+--PdfFile.Stream = {}
 PdfFile.PagesKids = {}
 PdfFile.Resources = {}
-PdfFile.ImagesObjects = {}
 
 
-PdfFile.Read = function(filename)
-    local fh = assert(io.input(filename))
-    return fh
-end
 
-PdfFile.Parse = function(fh)
+PdfFile.Parse = function(blob)
+    local temporaryTable = {}
     local structure = {}
-    while true do
-        local line = io.read()
-        if line == nil or line == "%%EOF" then break end
-        local n, sn = line:match("(%d+)%s+(%d+)%s+obj")
+-------------------------------------------
+-- Fill temporary table with blob content
+    local currentLine = 1
+    temporaryTable[currentLine] = ""
+    for currentChar = 1, #blob do
+        char = getNextBinaryChar(blob, currentChar)
+        temporaryTable[currentLine] = temporaryTable[currentLine]..char
+        if char == "\n" then
+            currentLine = currentLine + 1
+            temporaryTable[currentLine] = ""
+        end
+    end
+
+
+    if debug then print("Number of lines in temporary table: "..table.getn(temporaryTable)) end
+    for currentLine = 1, table.getn(temporaryTable) do
+        if temporaryTable[currentLine]:match("%%EOF") then 
+            if debug then print("Got EOF :"..temporaryTable[currentLine]) end
+            break 
+        end
+        local n, sn = temporaryTable[currentLine]:match("(%d+)%s+(%d+)%s+obj")
         if n then
+            currentLine = currentLine + 1
             local isObject = true
             PdfFile.ObjectCounter = PdfFile.ObjectCounter + 1
+            if debug then print("Found Object "..n) end
             n = tonumber(n)
             structure[n] = ""
---            if debug then print("Found Object "..n) end
             while isObject do
-                line = io.read()
-                if line == nil then break end
-                if not line:match("endobj") then
-                     if line:match("^stream") then
-                        local StartStreamPos = io.input():seek()
-                        while true do
-                            if io.read():match("endstream")  then break end
-                        end
-                        local StopStreamPos = io.input():seek() - 9
-                        local binfh = io.open(arg[1], "rb")
-                        binfh:seek("set", StartStreamPos)
-                        PdfFile.Stream[n] = binfh:read(StopStreamPos - StartStreamPos - 1)
-                        binfh:close()
-                      end
-                    structure[n] = structure[n]..line.."\n"
+                if not temporaryTable[currentLine]:match("endobj") then
+--                    if temporaryTable[currentLine]:match("stream") then
+--                        if debug then print("Object with a stream") end
+--                        PdfFile.Stream[n] = ""
+--                        while true do
+--                           PdfFile.Stream[n] = PdfFile.Stream[n]..temporaryTable[currentLine]
+--                            currentLine = currentLine + 1
+--                            if temporaryTable[currentLine]:match("^endstream") then
+--                                PdfFile.Stream[n] =PdfFile.Stream[n].."endstream\n"
+--                                currentLine = currentLine + 1
+--                                break
+--                            end
+--                        end
+--                     end -- if match straem
+                     structure[n] = structure[n]..temporaryTable[currentLine]
                 else
                     isObject = false
-                end
-            end
---            if debug then print(structure[n]) end
+                end -- end if endobj
+            currentLine = currentLine + 1
+            end -- end while isObject
+
+--            if debug then print("Object text: ", unpack(structure)) end
         end -- end if obj found
-        if line:match("trailer") then
+--print(structure[5])
+        if temporaryTable[currentLine]:match("trailer") then
         trailer = ""
             while true do
-                line = io.read()
+                local tline = temporaryTable[currentLine]:gsub("\n","")
                 trsubst = {"(/Size%s%d+)", "(/Root%s+%d+%s+%d+%s+R)", "(/Info%s+%d+%s+%d+%s+R)", }
                 for _, i in pairs(trsubst) do
                     
-                    local trout = line:match(i) or ""
+                    local trout = temporaryTable[currentLine]:match(i) or ""
                     if trout ~= "" then trout = trout.."\n" end
                     trailer = trailer..trout
                 end
-                if line:match(">>") then
+                if temporaryTable[currentLine]:match(">>") then
                     break
                 end
+            currentLine = currentLine + 1
             end
         end 
     end -- main loop
@@ -101,19 +157,17 @@ end
 
 function split(pdf) 
 
+    if debug then print("Blob size: "..#pdf.." bytes") end
     PdfFile.Trailer, PdfFile.Structure = PdfFile.Parse(pdf)
-
 -- if debug then print("Trailer: "..PdfFile.Trailer) end
 -----------------------
 -- Get root catalog
-    PdfFile.RootObject = PdfFile.Trailer:match("/Root%s+(%d+)%s+%d+")
+    PdfFile.RootObject = tonumber(PdfFile.Trailer:match("/Root%s+(%d+)%s+%d+"))
     if debug then print("RootCatalog object:  "..PdfFile.RootObject) end
 -----------------------
--- Get page number
-    PdfFile.RootObject = tonumber(PdfFile.RootObject)
-    PdfFile.PagesObject = PdfFile.Structure[PdfFile.RootObject]:match("/Pages%s(%d+)%s%d%sR")
+-- Get root page number
+    PdfFile.PagesObject = getItNum(PdfFile.Structure[PdfFile.RootObject],"/Pages%s(%d+)%s%d%sR")
     if debug then print("Pages object:  "..PdfFile.PagesObject) end
-    PdfFile.PagesObject = tonumber(PdfFile.PagesObject)
     PdfFile.NumPages = PdfFile.Structure[PdfFile.PagesObject]:match("/Count%s(%d+)")
     if debug then print("Number of pages in pdf: "..PdfFile.NumPages) end
 
@@ -124,17 +178,15 @@ function split(pdf)
     end
 ---------------------------
 -- Create output blobs
+    local outputBlob = {}
     for pageCounter = 1, PdfFile.NumPages do
-    -- create filename 
-        local outputBlobIDX = arg[1]:match("(%a+).pdf")
-        fname = fname.."-"..pageCounter..".pdf"
-        local wfh=io.open(fname,"wb")
+        local outputBlobIDX = pageCounter
 ---------------------------------------
 -- Creating output PdfFile
     
     local PdfFile2Write = copyTable(PdfFile)
 -- Write /Count 1 to Pages obj
-    local a = PdfFile.Structure[PdfFile.PagesObject]:gsub("/Count%s+%d+", "/Count 1")
+    local a = changeItString(PdfFile.Structure[PdfFile.PagesObject], "/Count%s+%d+", "/Count 1")
     PdfFile2Write.Structure[PdfFile2Write.PagesObject] = a
 -- 
     local tmp = PdfFile2Write.Structure[PdfFile2Write.PagesObject]:gsub("\n","")
@@ -153,8 +205,8 @@ function split(pdf)
     while true do
         key, tail = kids:match("^%s*(%w+)%s+(.*)$")
         if not key then break end
-        if not ( key == "0" or key == "R" or tonumber(key) == tonumber(PdfFile.PagesKids[pageCounter]) ) then
-            local tmp = PdfFile2Write.Structure[tonumber(key)]:gsub("\n", " ")
+        if not ( key == "0" or key == "R" or tonumber(key) == tonumber(PdfFile.PagesKids[pageCounter]) ) then -- Find valuable numbers
+        local tmp = changeItString(PdfFile2Write.Structure[tonumber(key)],"\n","")
             local page = tmp:match("/Resources%s+(%d+)%s+%d+%s+R")
             local imgPage = PdfFile2Write.Structure[tonumber(page)]:gsub("\n", " ")
             local imgObj = imgPage:match("/Im0%s+(%d+)%s+%d+%s+R")
@@ -164,44 +216,61 @@ function split(pdf)
     end
 --    removeUnnecessary(PdfFile2Write, unnecessaryList)
 ---------------------------------------
--- Forming page
+-- Forming output pdf page
+    outputBlob[outputBlobIDX] = ""
     -- write header
-    wfh:write("%PDF-1.3\n")
-    wfh:write("%\208\206\165\178\n")
+    
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."%PDF-1.3\n"
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."%\208\206\165\178\n"
     -- write objects
     for i,data in pairs(PdfFile2Write.Structure) do
         if not testUnnecessary(PdfFile2Write, i, unnecessaryList) then 
-            PdfFile2Write.Offset[i] = wfh:seek()
-            wfh:write(i.." 0 obj\n")    
-            wfh:write(PdfFile2Write.Structure[i])
-            if PdfFile2Write.Stream[i] ~=nil then 
-                wfh:seek("end")
-                wfh:write(PdfFile2Write.Stream[i])
-                wfh:write("endstream\n")
-            end
-            wfh:write("endobj\n\n")
+            PdfFile2Write.Offset[i] = #outputBlob[outputBlobIDX]
+            outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..i.." 0 obj\n"    
+            outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..toString(PdfFile2Write.Structure[i])
+--            if PdfFile2Write.Stream[i] ~=nil then 
+--                outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..toString(PdfFile2Write.Stream[i])
+--            end
+            outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."endobj\n"
         end -- end if test unnecessaty
-    end
+    end -- for loop
    -- write trailer
-    local xferOffset = wfh:seek()
-    wfh:write("xref\n")
-    wfh:write("0 "..tostring(PdfFile2Write.ObjectCounter + 1).."\n")
-    wfh:write("0000000000 65535 f\n")
+    local xferOffset = #outputBlob[outputBlobIDX]
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."xref\n"
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX],"0 "..tostring(PdfFile2Write.ObjectCounter + 1).."\n"
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."0000000000 65535 f\n"
     for i in pairs(PdfFile2Write.Structure) do
         if not testUnnecessary(PdfFile2Write, i, unnecessaryList) then 
             o = string.format("%010d", PdfFile2Write.Offset[i])
-            wfh:write(o.." 00000 n\n")
+            outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..o.." 00000 n\n"
         end
     end
-    wfh:write("trailer\n<<\n")
-    wfh:write(PdfFile2Write.Trailer..">>\n")
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."trailer\n<<\n"
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..toString(PdfFile2Write.Trailer)..">>\n"
     -- write footer 
-    wfh:write("startxref\n"..xferOffset.."\n")
-    wfh:write("%%EOF\n")
-    wfh:close()
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."startxref\n"..xferOffset.."\n"
+    outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."%%EOF\n"
 end -- end write file loop
 
-return splittedPdfs
+return outputBlob
 
 
 end -- end split (main) function
+
+--------------------------------------------------
+-- Cut below
+
+local a = io.open("rep.pdf",rb)
+local f = a:read("*all")
+io.close(a)
+
+
+
+local o = split(f)
+
+for i =1, table.getn(o) do
+local str = toString(o[i])
+local w = io.output("rep-"..i..".pdf")
+io.write(str)
+io.close(w)
+end
