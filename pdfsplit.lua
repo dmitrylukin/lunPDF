@@ -70,7 +70,6 @@ PdfFile.RootObject = 0
 PdfFile.PagesObject = 0
 PdfFile.Structure = {}
 PdfFile.Offset = {}
---PdfFile.Stream = {}
 PdfFile.PagesKids = {}
 PdfFile.Resources = {}
 
@@ -109,29 +108,14 @@ PdfFile.Parse = function(blob)
             structure[n] = ""
             while isObject do
                 if not temporaryTable[currentLine]:match("endobj") then
---                    if temporaryTable[currentLine]:match("stream") then
---                        if debug then print("Object with a stream") end
---                        PdfFile.Stream[n] = ""
---                        while true do
---                           PdfFile.Stream[n] = PdfFile.Stream[n]..temporaryTable[currentLine]
---                            currentLine = currentLine + 1
---                            if temporaryTable[currentLine]:match("^endstream") then
---                                PdfFile.Stream[n] =PdfFile.Stream[n].."endstream\n"
---                                currentLine = currentLine + 1
---                                break
---                            end
---                        end
---                     end -- if match straem
-                     structure[n] = structure[n]..temporaryTable[currentLine]
+                    structure[n] = structure[n]..temporaryTable[currentLine]
                 else
                     isObject = false
                 end -- end if endobj
             currentLine = currentLine + 1
             end -- end while isObject
 
---            if debug then print("Object text: ", unpack(structure)) end
         end -- end if obj found
---print(structure[5])
         if temporaryTable[currentLine]:match("trailer") then
         trailer = ""
             while true do
@@ -159,7 +143,6 @@ function split(pdf)
 
     if debug then print("Blob size: "..#pdf.." bytes") end
     PdfFile.Trailer, PdfFile.Structure = PdfFile.Parse(pdf)
--- if debug then print("Trailer: "..PdfFile.Trailer) end
 -----------------------
 -- Get root catalog
     PdfFile.RootObject = tonumber(PdfFile.Trailer:match("/Root%s+(%d+)%s+%d+"))
@@ -214,7 +197,6 @@ function split(pdf)
         end
         kids = tail
     end
---    removeUnnecessary(PdfFile2Write, unnecessaryList)
 ---------------------------------------
 -- Forming output pdf page
     outputBlob[outputBlobIDX] = ""
@@ -228,9 +210,6 @@ function split(pdf)
             PdfFile2Write.Offset[i] = #outputBlob[outputBlobIDX]
             outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..i.." 0 obj\n"    
             outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..toString(PdfFile2Write.Structure[i])
---            if PdfFile2Write.Stream[i] ~=nil then 
---                outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX]..toString(PdfFile2Write.Stream[i])
---            end
             outputBlob[outputBlobIDX] = outputBlob[outputBlobIDX].."endobj\n"
         end -- end if test unnecessaty
     end -- for loop
